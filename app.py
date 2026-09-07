@@ -4,9 +4,14 @@ Avvio:
     streamlit run app.py
 
 Per la prova in studio: gira in locale sul portatile, niente deploy necessario.
+
+Gestione quota free tier: se il modello principale esaurisce le richieste
+giornaliere gratuite, si passa automaticamente al modello di riserva (quota
+separata); se finiscono entrambe, messaggio gentile invece dell'errore.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -20,6 +25,9 @@ from search import search
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError
+
+FALLBACK_MODEL = "gemini-2.5-flash-lite"  # quota gratuita separata dal modello principale
 
 st.set_page_config(page_title="ContAI — prototipo", page_icon="📄")
 st.title("ContAI — assistente di ricerca sul regime forfettario")
@@ -32,6 +40,29 @@ st.warning(
     icon="⚠️",
 )
 
+
+def generate_with_fallback(client: genai.Client, prompt: str) -> tuple[str, str | None]:
+    """Genera la risposta; ritorna (testo, modello_usato o None se quota finita)."""
+    for model in (GENERATION_MODEL, FALLBACK_MODEL):
+        for attesa in (0, 45, 90):  # fino a 3 tentativi per modello
+            try:
+                if attesa:
+                    time.sleep(attesa)
+                r = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        temperature=0.1,
+                    ),
+                )
+                return r.text, model
+            except ClientError as e:
+                if e.code != 429:
+                    raise
+    return "", None
+
+
 query = st.text_input(
     "La tua domanda",
     placeholder="es. Posso essere forfettario se ho anche un lavoro dipendente?",
@@ -41,22 +72,20 @@ if query:
     with st.spinner("Cerco nelle fonti e scrivo la risposta..."):
         results = search(query, k=5)
         client = genai.Client()
-        response = client.models.generate_content(
-            model=GENERATION_MODEL,
-            contents=build_prompt(query, results),
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.1,
-            ),
-        )
-        answer = response.text
+        answer, model_used = generate_with_fallback(client, build_prompt(query, results))
 
-    st.markdown("### Risposta")
-    st.markdown(answer)
+    if model_used is None:
+        st.error("Quota giornaliera gratuita esaurita su entrambi i modelli. "
+                 "Si sblocca da sola domani — intanto puoi guardare le fonti qui sotto.")
+    else:
+        st.markdown("### Risposta")
+        st.markdown(answer)
+        if model_used != GENERATION_MODEL:
+            st.caption(f"(risposta generata col modello di riserva {model_used})")
 
-    invalid = check_citations(answer, len(results))
-    if invalid:
-        st.error(f"Attenzione: citazioni non valide rilevate {invalid} — risposta da scartare.")
+        invalid = check_citations(answer, len(results))
+        if invalid:
+            st.error(f"Attenzione: citazioni non valide rilevate {invalid} — risposta da scartare.")
 
     st.markdown("### Fonti utilizzate")
     for i, (doc, section, text, dist) in enumerate(results, 1):
