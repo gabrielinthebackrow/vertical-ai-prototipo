@@ -34,7 +34,7 @@ from search import search
 
 from google import genai
 from google.genai import types
-from google.genai.errors import ClientError
+from google.genai.errors import ClientError, ServerError
 
 FALLBACK_MODEL = "gemini-2.5-flash-lite"  # quota gratuita separata dal modello principale
 
@@ -51,7 +51,11 @@ st.warning(
 
 
 def generate_with_fallback(client: genai.Client, prompt: str) -> tuple[str, str | None]:
-    """Genera la risposta; ritorna (testo, modello_usato o None se quota finita)."""
+    """Genera la risposta; ritorna (testo, modello_usato o None se non ce l'ha fatta).
+
+    Si riprova sia su quota esaurita (429) sia su errori temporanei di Google (5xx),
+    poi si passa al modello di riserva.
+    """
     for model in (GENERATION_MODEL, FALLBACK_MODEL):
         for attesa in (0, 45, 90):  # fino a 3 tentativi per modello
             try:
@@ -69,6 +73,8 @@ def generate_with_fallback(client: genai.Client, prompt: str) -> tuple[str, str 
             except ClientError as e:
                 if e.code != 429:
                     raise
+            except ServerError:
+                continue  # errore temporaneo lato Google: si riprova
     return "", None
 
 
@@ -84,8 +90,9 @@ if query:
         answer, model_used = generate_with_fallback(client, build_prompt(query, results))
 
     if model_used is None:
-        st.error("Quota giornaliera gratuita esaurita su entrambi i modelli. "
-                 "Si sblocca da sola domani — intanto puoi guardare le fonti qui sotto.")
+        st.error("Il servizio di generazione non è disponibile in questo momento "
+                 "(quota esaurita o problema temporaneo di Google). "
+                 "Riprova tra un paio di minuti — intanto puoi guardare le fonti qui sotto.")
     else:
         st.markdown("### Risposta")
         st.markdown(answer)
