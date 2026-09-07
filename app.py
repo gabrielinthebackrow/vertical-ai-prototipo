@@ -36,7 +36,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ClientError, ServerError
 
-FALLBACK_MODEL = "gemini-2.5-flash-lite"  # quota gratuita separata dal modello principale
+FALLBACK_MODEL = "gemini-3.5-flash-lite"  # quota gratuita separata dal modello principale
 
 st.set_page_config(page_title="ContAI — prototipo", page_icon="📄")
 st.title("ContAI — assistente di ricerca sul regime forfettario")
