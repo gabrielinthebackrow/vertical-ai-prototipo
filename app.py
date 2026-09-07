@@ -10,6 +10,7 @@ giornaliere gratuite, si passa automaticamente al modello di riserva (quota
 separata); se finiscono entrambe, messaggio gentile invece dell'errore.
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,14 @@ import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv(".env")
+
+# In locale le chiavi arrivano da .env; su Streamlit Cloud dai "secrets" dell'app.
+try:
+    for _k in ("GOOGLE_API_KEY", "DATABASE_URL"):
+        if _k in st.secrets:
+            os.environ[_k] = st.secrets[_k]
+except Exception:
+    pass
 
 sys.path.insert(0, str(Path(__file__).parent / "src" / "pipeline"))
 from answer import GENERATION_MODEL, SYSTEM_PROMPT, build_prompt, check_citations
