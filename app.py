@@ -71,8 +71,11 @@ def generate_with_fallback(client: genai.Client, prompt: str) -> tuple[str, str 
                 )
                 return r.text, model
             except ClientError as e:
-                if e.code != 429:
-                    raise
+                if e.code == 429:
+                    continue  # quota: riprova/passa al modello di riserva
+                # Errore di configurazione (es. chiave non valida): inutile riprovare,
+                # lo mostriamo subito per poterlo diagnosticare
+                return f"__ERRORE_CONFIG__{e.code}: {e.message}", None
             except ServerError:
                 continue  # errore temporaneo lato Google: si riprova
     return "", None
@@ -90,9 +93,13 @@ if query:
         answer, model_used = generate_with_fallback(client, build_prompt(query, results))
 
     if model_used is None:
-        st.error("Il servizio di generazione non è disponibile in questo momento "
-                 "(quota esaurita o problema temporaneo di Google). "
-                 "Riprova tra un paio di minuti — intanto puoi guardare le fonti qui sotto.")
+        if answer.startswith("__ERRORE_CONFIG__"):
+            st.error("Errore di configurazione della chiave Google. Dettaglio: "
+                     + answer.removeprefix("__ERRORE_CONFIG__"))
+        else:
+            st.error("Il servizio di generazione non è disponibile in questo momento "
+                     "(quota esaurita o problema temporaneo di Google). "
+                     "Riprova tra un paio di minuti — intanto puoi guardare le fonti qui sotto.")
     else:
         st.markdown("### Risposta")
         st.markdown(answer)
