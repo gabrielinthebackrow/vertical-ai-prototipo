@@ -1,0 +1,27 @@
+# Core
+python-dotenv
+httpx
+pydantic
+
+# LLM / embeddings / rerank
+google-genai
+anthropic
+openai
+cohere
+
+# RAG / parsing / vector DB
+llama-index
+psycopg[binary]
+pgvector
+pypdf
+
+# API + UI
+fastapi
+uvicorn
+streamlit
+
+# Tracing + eval
+langfuse
+
+# Eval set runner
+pytest
